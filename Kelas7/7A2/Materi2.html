@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 2</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu membeli beberapa barang yang sama dan memperhatikan bahwa total harganya ikut bertambah?</li>
+<li>Jika semakin banyak orang membantu mengerjakan tugas kelompok, apakah waktu yang dibutuhkan menjadi lebih lama atau lebih cepat?</li>
+<li>Mengapa menambah jumlah pekerja bisa memengaruhi lama suatu pekerjaan selesai?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+<div class="content" id="kontekstual">
+<ol>
+<li>Membandingkan jumlah barang yang dibeli dengan total harga yang harus dibayar.</li>
+<li>Mengamati hubungan antara jumlah pekerja dan lama waktu menyelesaikan pekerjaan.</li>
+<li>Mengaitkan banyaknya bensin yang dibeli dengan total biaya.</li>
+<li>Menentukan hubungan antara kecepatan kendaraan dan waktu tempuh perjalanan.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+<div class="content" id="tujuan">
+Siswa dapat membedakan antara perbandingan senilai dan berbalik nilai serta mengidentifikasi penggunaannya dalam kehidupan sehari-hari
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+<div class="content" id="aktivitas">
+<ol>
+<li>Siswa mengamati beberapa situasi sehari-hari untuk menebak apakah hubungannya saling mengikuti atau saling berlawanan.</li>
+<li>Siswa berdiskusi dalam kelompok untuk mengelompokkan contoh ke dalam dua jenis perbandingan.</li>
+<li>Siswa menyampaikan hasil diskusi kelompok secara singkat di depan kelas.</li>
+<li>Siswa mengerjakan latihan kontekstual secara individu untuk mengenali jenis perbandingan yang sesuai.</li>
+</ol>
+</div>
+
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+<div class="content" id="konsep">
+🔹 Perbandingan Senilai<br>
+Perbandingan senilai terjadi ketika dua besaran bertambah atau berkurang secara bersamaan. Jika satu besaran naik, maka besaran lainnya juga naik dengan proporsi yang sama.<br>
+Contoh:<br>
+Harga 1 buku Rp10.000 → 2 buku Rp20.000 → 3 buku Rp30.000<br>
+Jumlah buku dan total harga senilai.<br><br>
+🔹 Perbandingan Berbalik Nilai<br>
+Perbandingan berbalik nilai terjadi ketika satu besaran bertambah, maka besaran lainnya berkurang, dan sebaliknya.<br>
+Contoh:<br>
+Jika 4 pekerja menyelesaikan pekerjaan dalam 6 hari, maka 8 pekerja akan menyelesaikannya lebih cepat, misalnya dalam 3 hari.<br>
+Jumlah pekerja dan waktu kerja berbalik nilai.
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+<div class="content" id="contoh">
+✅ Contoh Soal 1 (Senilai):<br>
+Seorang penjual menjual 1 kg apel seharga Rp25.000. Berapa harga untuk 2 kg, 3 kg, dan 4 kg apel?<br>
+Penyelesaian:<br>
+- 2 kg → Rp50.000<br>
+- 3 kg → Rp75.000<br>
+- 4 kg → Rp100.000<br>
+Karena jumlah apel bertambah, harga juga bertambah secara proporsional → senilai<br><br>
+✅ Contoh Soal 2 (Berbalik Nilai):<br>
+Sebuah pekerjaan dapat diselesaikan oleh 5 orang dalam 12 hari. Jika jumlah pekerja menjadi 10 orang, berapa hari yang dibutuhkan?<br>
+Penyelesaian:<br>
+- 5 orang → 12 hari<br>
+- 10 orang → x hari<br>
+Karena jumlah pekerja bertambah, waktu kerja berkurang → berbalik nilai<br>
+Gunakan rumus:<br>
+5 × 12 = 10 × x ⇒ x = 60 / 10 = 6 hari
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+<div class="content" id="latihan">
+Sebuah mobil menempuh jarak 120 km dalam 2 jam. Berapa jarak yang ditempuh dalam 3, 4, dan 5 jam jika kecepatannya tetap?<br><br>
+6 orang dapat menyelesaikan proyek dalam 15 hari. Berapa hari yang dibutuhkan jika:<br>
+3 orang yang bekerja?<br>
+9 orang yang bekerja?<br><br>
+Harga 1 liter bensin adalah Rp13.000. Hitung harga untuk 2, 3, dan 5 liter bensin.<br><br>
+Sebuah kolam dapat dikuras oleh 4 pompa dalam 8 jam. Jika hanya 2 pompa yang digunakan, berapa lama waktu yang dibutuhkan?
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+<div class="content" id="refleksi">
+<ol>
+<li>Apa perbedaan utama antara perbandingan senilai dan berbalik nilai?</li>
+<li>Dalam situasi apa kamu pernah mengalami perbandingan berbalik nilai?</li>
+<li>Bagian mana dari materi hari ini yang paling mudah dan paling menantang?</li>
+<li>Tuliskan satu contoh perbandingan senilai dan satu contoh berbalik nilai dari kehidupanmu sehari-hari.</li>
+</ol>
+</div>
+
+
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 26</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu berbelanja dan mendapatkan diskon, lalu masih harus membayar pajak?</li>
+  <li>Bagaimana caramu menentukan apakah suatu transaksi jual beli menguntungkan atau merugikan?</li>
+  <li>Menurutmu, mengapa dalam kehidupan nyata sering digunakan lebih dari satu perhitungan sekaligus?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+<div class="content" id="kontekstual">
+<ol>
+  <li>Menghitung harga akhir barang yang mendapat diskon lalu dikenai pajak.</li>
+  <li>Menentukan keuntungan atau kerugian dalam jual beli setelah mempertimbangkan diskon.</li>
+  <li>Menghitung hasil tabungan atau investasi sederhana untuk memenuhi kebutuhan tertentu.</li>
+  <li>Mengambil keputusan belanja atau menabung berdasarkan hasil perhitungan.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+<div class="content" id="tujuan">
+<ol>
+  <li>Mengintegrasikan konsep harga beli, harga jual, untung, rugi, diskon, pajak, dan bunga tunggal.</li>
+  <li>Menyelesaikan masalah kontekstual yang melibatkan lebih dari satu konsep aritmetika sosial.</li>
+  <li>Menjelaskan strategi penyelesaian masalah secara logis dan sistematis.</li>
+</ol>
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+<div class="content" id="aktivitas">
+<ol>
+  <li>Siswa mengamati beberapa masalah aritmetika sosial yang melibatkan dua atau lebih konsep.</li>
+  <li>Siswa berdiskusi dalam kelompok untuk menentukan langkah penyelesaian yang tepat.</li>
+  <li>Siswa menyusun urutan perhitungan secara logis dari masalah yang diberikan.</li>
+  <li>Siswa mengerjakan latihan soal terpadu secara mandiri untuk menerapkan strategi yang dipelajari.</li>
+</ol>
+</div>
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+<div class="content" id="konsep" style="white-space: pre-line;">
+Masalah aritmetika sosial dalam kehidupan nyata sering melibatkan beberapa konsep sekaligus, seperti:
+
+Diskon dan pajak dalam pembelian barang.
+Untung dan rugi dalam jual beli.
+Bunga tunggal dalam tabungan atau investasi.
+
+Peserta didik perlu:
+
+Memahami urutan perhitungan (misalnya: diskon dulu, lalu pajak).
+Menentukan informasi yang relevan dari soal cerita.
+Menggunakan rumus-rumus yang telah dipelajari secara tepat.
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+<div class="content" id="contoh" style="white-space: pre-line;">
+<strong>✅ Contoh Soal</strong>
+
+Toko “Serba Murah” menjual sebuah televisi dengan harga Rp4.000.000. Toko memberikan diskon 10%, lalu mengenakan PPN 11% dari harga setelah diskon.
+
+Tentukan:
+Harga setelah diskon.
+Besar pajak.
+Harga akhir yang harus dibayar pembeli.
+
+Penyelesaian:
+Diskon = (10/100) × 4.000.000 = 400.000
+Harga setelah diskon = 4.000.000 - 400.000 = 3.600.000
+Pajak = (11/100) × 3.600.000 = 396.000
+Harga akhir = 3.600.000 + 396.000 = Rp3.996.000
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+<div class="content" id="latihan" style="white-space: pre-line;">
+Sebuah toko menjual kulkas seharga Rp3.500.000. Toko memberikan diskon 15%, lalu mengenakan PPN 10%.
+a. Hitung harga setelah diskon.
+b. Hitung besar pajak.
+c. Hitung harga akhir yang harus dibayar.
+
+Seorang pedagang membeli 10 buah blender seharga Rp250.000 per buah. Ia memberikan diskon 20% kepada pembeli dan tetap mendapat untung Rp20.000 per buah setelah diskon.
+a. Hitung harga jual setelah diskon.
+b. Hitung harga jual sebelum diskon.
+
+Kamu menabung Rp2.000.000 di bank dengan bunga tunggal 5% per tahun. Setelah 2 tahun, kamu ingin membeli handphone seharga Rp2.100.000 yang dikenai PPN 10%.
+a. Hitung nilai akhir tabungan.
+b. Hitung harga handphone setelah pajak.
+c. Apakah tabunganmu cukup? Jelaskan.
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+<div class="content" id="refleksi">
+<ol>
+  <li>Bagaimana aritmetika sosial membantu kita membuat keputusan finansial yang lebih bijak?</li>
+  <li>Apa tantangan yang kamu hadapi saat menyelesaikan soal yang melibatkan banyak konsep sekaligus?</li>
+  <li>Bagaimana strategi yang kamu gunakan untuk memahami dan menyelesaikan soal cerita?</li>
+</ol>
+
+Siswa dapat menuliskan jawaban mereka di buku catatan atau mendiskusikannya dalam kelompok kecil.
+</div>
+
+
+
+</div>
+</div>
+</body>
+</html>

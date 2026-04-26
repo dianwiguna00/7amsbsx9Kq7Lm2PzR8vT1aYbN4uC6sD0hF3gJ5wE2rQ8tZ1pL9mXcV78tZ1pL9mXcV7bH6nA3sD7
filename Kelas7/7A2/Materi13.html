@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 13</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu memperhatikan bentuk meja, papan tulis, atau rambu lalu lintas di sekitarmu? Termasuk bangun datar apakah benda-benda tersebut?</li>
+<li>Mengapa beberapa bangun datar terlihat mirip tetapi memiliki nama yang berbeda?</li>
+<li>Menurutmu, apa yang membuat satu bangun datar berbeda dari bangun datar lainnya?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+<div class="content" id="kontekstual">
+<ol>
+<li>Mengamati bentuk jendela, pintu, dan lantai kelas yang menyerupai bangun datar tertentu.</li>
+<li>Mengidentifikasi bentuk bangun datar pada rambu lalu lintas dan logo.</li>
+<li>Membandingkan bentuk ubin lantai dengan bentuk buku tulis atau papan pengumuman.</li>
+<li>Menemukan bangun datar pada benda-benda di rumah atau di sekolah.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+<div class="content" id="tujuan">
+Siswa dapat mengidentifikasi dan menjelaskan sifat-sifat berbagai bangun datar seperti segitiga, persegi, persegi panjang, jajar genjang, trapesium, belah ketupat, dan lingkaran
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+<div class="content" id="aktivitas">
+<ol>
+<li>Siswa mengamati berbagai gambar atau benda nyata yang memiliki bentuk bangun datar.</li>
+<li>Siswa berdiskusi dalam kelompok untuk mengelompokkan bangun datar berdasarkan ciri yang tampak.</li>
+<li>Siswa mempresentasikan hasil diskusi kelompok tentang kesamaan dan perbedaan bangun datar.</li>
+<li>Siswa mengerjakan latihan individu dengan mencocokkan bangun datar dan sifat-sifatnya.</li>
+</ol>
+</div>
+
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+<div class="content" id="konsep">
+🔹 Bangun Datar dan Sifat-Sifatnya<br>
+Segitiga<br>
+3 sisi, 3 sudut, jumlah sudut = 180°<br><br>
+Persegi<br>
+4 sisi sama panjang, 4 sudut siku-siku, 2 diagonal sama panjang dan saling tegak lurus<br><br>
+Persegi Panjang<br>
+2 pasang sisi sejajar dan sama panjang, 4 sudut siku-siku, 2 diagonal sama panjang<br><br>
+Jajar Genjang<br>
+2 pasang sisi sejajar, sudut berseberangan sama besar, diagonal tidak sama panjang<br><br>
+Trapesium<br>
+Hanya 1 pasang sisi sejajar, bisa memiliki sudut siku-siku<br><br>
+Belah Ketupat<br>
+4 sisi sama panjang, diagonal saling tegak lurus, sudut berseberangan sama besar<br><br>
+Lingkaran<br>
+Tidak memiliki sisi atau sudut, memiliki jari-jari, diameter, dan keliling
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+<div class="content" id="contoh">
+✅ Contoh Soal 1: Identifikasi Bangun<br>
+Contoh Gambar: Bangun dengan 4 sisi sama panjang dan diagonal saling tegak lurus.<br>
+Jawaban: Belah ketupat<br><br>
+✅ Contoh Soal 2: Kontekstual<br>
+Sebuah taman berbentuk persegi panjang memiliki panjang 12 m dan lebar 8 m. Sebutkan sifat-sifat bangun tersebut dan hitung panjang diagonalnya.<br>
+Jawaban:<br>
+- Sifat: 2 pasang sisi sejajar dan sama panjang, 4 sudut siku-siku, diagonal sama panjang.<br>
+- Diagonal: √(12² + 8²) = √(144 + 64) = √208 ≈ 14.42 m
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+<div class="content" id="latihan">
+Sebutkan 3 sifat dari bangun berikut:<br>
+a. Persegi<br>
+b. Jajar genjang<br>
+c. Lingkaran<br><br>
+Cocokkan bangun dengan sifatnya:<br>
+a. Memiliki 4 sisi sama panjang dan sudut tidak siku-siku → ?<br>
+b. Memiliki 1 pasang sisi sejajar → ?<br>
+c. Memiliki 3 sisi dan jumlah sudutnya 180° → ?<br><br>
+Gambarlah masing-masing bangun datar berikut dan tuliskan sifat-sifatnya:<br>
+a. Segitiga<br>
+b. Trapesium<br>
+c. Belah ketupat<br><br>
+Temukan contoh bangun datar dari lingkungan sekitar (misalnya jendela, meja, rambu lalu lintas) dan identifikasi sifat-sifatnya.
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+<div class="content" id="refleksi">
+<ol>
+<li>Bangun datar mana yang paling mudah kamu kenali? Mengapa?</li>
+<li>Apa manfaat memahami sifat-sifat bangun datar dalam kehidupan sehari-hari?</li>
+<li>Bagian mana dari materi hari ini yang paling kamu kuasai dan mana yang masih membingungkan?</li>
+<li>Tuliskan satu bangun datar yang kamu temui hari ini dan sifat-sifat yang kamu amati dari bangun tersebut.</li>
+</ol>
+</div>
+
+
+
+</div>
+</div>
+</body>
+</html>

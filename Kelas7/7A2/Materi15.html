@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 15</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu melihat bentuk atap rumah atau papan reklame yang tidak berbentuk persegi panjang?</li>
+<li>Saat menghias kelas atau membuat layang-layang, pernahkah kamu memperhatikan bentuk dan sisi-sisinya?</li>
+<li>Mengapa beberapa bangun datar memiliki bentuk berbeda tetapi tetap bisa dihitung keliling dan luasnya?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+
+<div class="content" id="kontekstual">
+<ol>
+<li>Mengamati bentuk jajar genjang pada susunan genteng atau pola kain.</li>
+<li>Melihat bentuk trapesium pada papan reklame atau atap rumah.</li>
+<li>Mengamati belah ketupat pada hiasan dinding, layang-layang, atau motif batik.</li>
+<li>Membandingkan bentuk bangun datar tersebut pada benda-benda di sekitar lingkungan sekolah.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+
+<div class="content" id="tujuan">
+<ol>
+<li>Siswa dapat menghitung keliling dan luas jajar genjang, trapesium, dan belah ketupat menggunakan rumus yang sesuai, serta menerapkannya dalam konteks kehidupan sehari-hari.</li>
+</ol>
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+
+<div class="content" id="aktivitas">
+<ol>
+<li>Siswa mengamati gambar atau benda nyata yang berbentuk jajar genjang, trapesium, dan belah ketupat.</li>
+<li>Siswa berdiskusi dalam kelompok untuk mengidentifikasi sisi, sudut, dan ukuran bangun yang diamati.</li>
+<li>Siswa menyampaikan hasil diskusi tentang perbedaan bentuk dan bagian-bagian setiap bangun datar.</li>
+<li>Siswa mengerjakan latihan individu menghitung keliling dan luas bangun datar berdasarkan situasi kontekstual sederhana.</li>
+</ol>
+</div>
+
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+
+<div class="content" id="konsep">
+<strong>Jajar Genjang</strong><br>
+Keliling (K) = 2 × (sisi alas + sisi miring)<br>
+Luas (L) = alas × tinggi<br><br>
+
+<strong>Trapesium</strong><br>
+Keliling (K) = jumlah semua sisi<br>
+Luas (L) = ½ × (jumlah sisi sejajar) × tinggi<br>
+L = ½ × (a + b) × t, dengan a dan b adalah sisi sejajar<br><br>
+
+<strong>Belah Ketupat</strong><br>
+Keliling (K) = 4 × sisi<br>
+Luas (L) = ½ × diagonal 1 × diagonal 2<br>
+L = ½ × d₁ × d₂
+
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+
+<div class="content" id="contoh">
+<strong>Contoh Soal 1: Jajar Genjang</strong><br>
+Sebuah jajar genjang memiliki alas 10 cm, tinggi 6 cm, dan sisi miring 7 cm. Hitung keliling dan luasnya.<br>
+Penyelesaian:<br>
+Keliling = 2 × (10 + 7) = 2 × 17 = 34 cm<br>
+Luas = 10 × 6 = 60 cm²<br><br>
+
+<strong>Contoh Soal 2: Trapesium</strong><br>
+Sebuah trapesium memiliki sisi sejajar 12 cm dan 8 cm, tinggi 5 cm, dan dua sisi lainnya masing-masing 6 cm dan 7 cm. Hitung keliling dan luasnya.<br>
+Penyelesaian:<br>
+Keliling = 12 + 8 + 6 + 7 = 33 cm<br>
+Luas = ½ × (12 + 8) × 5 = ½ × 20 × 5 = 50 cm²<br><br>
+
+<strong>Contoh Soal 3: Belah Ketupat</strong><br>
+Sebuah belah ketupat memiliki panjang sisi 9 cm, diagonal 1 = 12 cm, dan diagonal 2 = 8 cm. Hitung keliling dan luasnya.<br>
+Penyelesaian:<br>
+Keliling = 4 × 9 = 36 cm<br>
+Luas = ½ × 12 × 8 = ½ × 96 = 48 cm²
+
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+
+<div class="content" id="latihan">
+<ol>
+<li>Sebuah jajar genjang memiliki alas 14 cm, tinggi 9 cm, dan sisi miring 10 cm. Hitung keliling dan luasnya.</li>
+<li>Sebuah trapesium memiliki sisi sejajar 15 cm dan 10 cm, tinggi 6 cm, dan dua sisi lainnya masing-masing 7 cm dan 8 cm. Hitung keliling dan luasnya.</li>
+<li>Sebuah belah ketupat memiliki sisi 6 cm, diagonal 1 = 10 cm, dan diagonal 2 = 12 cm. Hitung keliling dan luasnya.</li>
+<li>Gambarlah masing-masing bangun datar di atas dan tuliskan rumus serta hasil perhitungan keliling dan luasnya berdasarkan ukuran yang kamu tentukan sendiri.</li>
+</ol>
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+
+<div class="content" id="refleksi">
+<ol>
+<li>Bangun datar mana yang paling mudah kamu hitung keliling dan luasnya? Mengapa?</li>
+<li>Apa tantangan yang kamu hadapi saat menghitung luas trapesium atau belah ketupat?</li>
+<li>Dalam kehidupan sehari-hari, kapan kamu perlu menghitung keliling atau luas bangun-bangun ini?</li>
+<li>Tuliskan satu contoh nyata dari lingkunganmu yang berbentuk jajar genjang, trapesium, atau belah ketupat, lalu hitung keliling dan luasnya.</li>
+</ol>
+</div>
+
+
+</div>
+</div>
+</body>
+</html>
